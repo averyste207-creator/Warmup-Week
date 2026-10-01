@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PiRover Control</title>
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --card: #1a1a22;
+      --accent: #00d4ff;
+      --accent-dim: #0099bb;
+      --text: #e0e0e8;
+      --muted: #8888a0;
+      --danger: #ff4466;
+      --success: #00cc88;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.3rem;
+      letter-spacing: 1px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 2rem;
+      font-size: 0.95rem;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--card);
+      padding: 0.6rem 1.2rem;
+      border-radius: 999px;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+
+    .dot.connected { background: var(--success); }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: auto auto auto;
+      gap: 0.8rem;
+      max-width: 320px;
+      width: 100%;
+      margin-bottom: 2rem;
+    }
+
+    .btn {
+      background: var(--card);
+      border: 2px solid #2a2a35;
+      color: var(--text);
+      font-size: 1.4rem;
+      height: 70px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .btn:hover { border-color: var(--accent-dim); }
+    .btn:active, .btn.active {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+      transform: scale(0.96);
+    }
+
+    .btn.forward { grid-column: 2; grid-row: 1; }
+    .btn.left    { grid-column: 1; grid-row: 2; }
+    .btn.stop    { grid-column: 2; grid-row: 2; background: #2a1a1a; border-color: #4a2a2a; }
+    .btn.right   { grid-column: 3; grid-row: 2; }
+    .btn.back    { grid-column: 2; grid-row: 3; }
+
+    .btn.stop:active, .btn.stop.active {
+      background: var(--danger);
+      color: white;
+      border-color: var(--danger);
+    }
+
+    .speed-section {
+      width: 100%;
+      max-width: 320px;
+      background: var(--card);
+      padding: 1.2rem;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+    }
+
+    .speed-section label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.6rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .info {
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-align: center;
+      max-width: 360px;
+      line-height: 1.5;
+    }
+
+    .key-hint {
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <h1>PiRover</h1>
+  <p class="subtitle">Local Control Dashboard</p>
+
+  <div class="status">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Disconnected (mock mode)</span>
+  </div>
+
+  <div class="controls">
+    <button class="btn forward" data-dir="forward">▲</button>
+    <button class="btn left"    data-dir="left">◀</button>
+    <button class="btn stop"    data-dir="stop">■</button>
+    <button class="btn right"   data-dir="right">▶</button>
+    <button class="btn back"    data-dir="back">▼</button>
+  </div>
+
+  <div class="speed-section">
+    <label>
+      <span>Speed</span>
+      <span id="speedValue">60%</span>
+    </label>
+    <input type="range" id="speed" min="0" max="100" value="60">
+  </div>
+
+  <p class="info">
+    This is a mock dashboard running fully on your computer.<br>
+    Later you can point the same UI at a Raspberry Pi Zero W.
+  </p>
+
+  <p class="key-hint">Keyboard: Arrow keys + Space to stop</p>
+
+  <script>
+    const statusDot  = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const speedInput = document.getElementById('speed');
+    const speedValue = document.getElementById('speedValue');
+    const buttons    = document.querySelectorAll('.btn[data-dir]');
+
+    let currentDir = 'stop';
+    let speed = 60;
+
+    // Simulate connection after 1.2 s
+    setTimeout(() => {
+      statusDot.classList.add('connected');
+      statusText.textContent = 'Connected (localhost mock)';
+    }, 1200);
+
+    function sendCommand(dir) {
+      currentDir = dir;
+      console.log(`Command → ${dir} @ ${speed}%`);
+      // Later: fetch('/api/move', { method:'POST', body: JSON.stringify({dir, speed}) })
+    }
+
+    buttons.forEach(btn => {
+      const dir = btn.dataset.dir;
+
+      // Mouse / touch
+      btn.addEventListener('mousedown',  () => { btn.classList.add('active'); sendCommand(dir); });
+      btn.addEventListener('mouseup',    () => { btn.classList.remove('active'); if (dir !== 'stop') sendCommand('stop'); });
+      btn.addEventListener('mouseleave', () => { btn.classList.remove('active'); if (dir !== 'stop') sendCommand('stop'); });
+
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); btn.classList.add('active'); sendCommand(dir); });
+      btn.addEventListener('touchend',   () => { btn.classList.remove('active'); if (dir !== 'stop') sendCommand('stop'); });
+    });
+
+    speedInput.addEventListener('input', () => {
+      speed = speedInput.value;
+      speedValue.textContent = speed + '%';
+    });
+
+    // Keyboard support
+    const keyMap = {
+      ArrowUp:    'forward',
+      ArrowDown:  'back',
+      ArrowLeft:  'left',
+      ArrowRight: 'right',
+      ' ':        'stop'
+    };
+
+    document.addEventListener('keydown', (e) => {
+      if (keyMap[e.key]) {
+        e.preventDefault();
+        const dir = keyMap[e.key];
+        document.querySelector(`.btn[data-dir="${dir}"]`)?.classList.add('active');
+        sendCommand(dir);
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (keyMap[e.key] && keyMap[e.key] !== 'stop') {
+        document.querySelector(`.btn[data-dir="${keyMap[e.key]}"]`)?.classList.remove('active');
+        sendCommand('stop');
+      }
+    });
+  </script>
+</body>
+</html>
