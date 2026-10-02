@@ -37,8 +37,16 @@
 
     .subtitle {
       color: var(--muted);
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
       font-size: 0.95rem;
+    }
+
+    .status-bar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
     .status {
@@ -46,10 +54,9 @@
       align-items: center;
       gap: 0.6rem;
       background: var(--card);
-      padding: 0.6rem 1.2rem;
+      padding: 0.55rem 1.1rem;
       border-radius: 999px;
-      margin-bottom: 2rem;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
     }
 
     .dot {
@@ -79,7 +86,7 @@
       height: 70px;
       border-radius: 12px;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.12s;
       user-select: none;
     }
 
@@ -129,14 +136,15 @@
       font-size: 0.85rem;
       color: var(--muted);
       text-align: center;
-      max-width: 360px;
+      max-width: 380px;
       line-height: 1.5;
     }
 
     .key-hint {
-      margin-top: 1.5rem;
+      margin-top: 1.2rem;
       font-size: 0.8rem;
       color: var(--muted);
+      text-align: center;
     }
   </style>
 </head>
@@ -144,9 +152,15 @@
   <h1>PiRover</h1>
   <p class="subtitle">Local Control Dashboard</p>
 
-  <div class="status">
-    <div class="dot" id="statusDot"></div>
-    <span id="statusText">Disconnected (mock mode)</span>
+  <div class="status-bar">
+    <div class="status">
+      <div class="dot" id="netDot"></div>
+      <span id="netText">Disconnected (mock)</span>
+    </div>
+    <div class="status">
+      <div class="dot" id="padDot"></div>
+      <span id="padText">No controller</span>
+    </div>
   </div>
 
   <div class="controls">
@@ -166,75 +180,176 @@
   </div>
 
   <p class="info">
-    This is a mock dashboard running fully on your computer.<br>
-    Later you can point the same UI at a Raspberry Pi Zero W.
+    Mouse, touch, keyboard <strong>and Xbox controller</strong> all work.<br>
+    Left stick / D-pad = move &nbsp;•&nbsp; Right trigger = speed &nbsp;•&nbsp; A/B/X/Y or Start = stop
   </p>
 
-  <p class="key-hint">Keyboard: Arrow keys + Space to stop</p>
+  <p class="key-hint">Keyboard: Arrow keys + Space</p>
 
   <script>
-    const statusDot  = document.getElementById('statusDot');
-    const statusText = document.getElementById('statusText');
+    // ========== DOM ==========
+    const netDot     = document.getElementById('netDot');
+    const netText    = document.getElementById('netText');
+    const padDot     = document.getElementById('padDot');
+    const padText    = document.getElementById('padText');
     const speedInput = document.getElementById('speed');
     const speedValue = document.getElementById('speedValue');
     const buttons    = document.querySelectorAll('.btn[data-dir]');
 
     let currentDir = 'stop';
     let speed = 60;
+    let gamepadIndex = null;
 
-    // Simulate connection after 1.2 s
+    // Simulate network connection
     setTimeout(() => {
-      statusDot.classList.add('connected');
-      statusText.textContent = 'Connected (localhost mock)';
-    }, 1200);
+      netDot.classList.add('connected');
+      netText.textContent = 'Connected (localhost mock)';
+    }, 1000);
 
-    function sendCommand(dir) {
-      currentDir = dir;
-      console.log(`Command → ${dir} @ ${speed}%`);
-      // Later: fetch('/api/move', { method:'POST', body: JSON.stringify({dir, speed}) })
+    // ========== Command sender ==========
+    function sendCommand(direction, speed = 0, a_pressed = false) {
+      currentDir = direction;
+      console.log(`→ ${direction} @ ${speed}%  A:${a_pressed}`);
+
+      fetch('http://localhost:5000/api/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direction, speed, a_pressed })
+      }).catch(err => console.log('Server not running yet'));
     }
 
+    function setActiveButton(dir) {
+      buttons.forEach(b => b.classList.toggle('active', b.dataset.dir === dir));
+    }
+
+    // ========== Mouse / Touch ==========
     buttons.forEach(btn => {
       const dir = btn.dataset.dir;
 
-      // Mouse / touch
-      btn.addEventListener('mousedown',  () => { btn.classList.add('active'); sendCommand(dir); });
-      btn.addEventListener('mouseup',    () => { btn.classList.remove('active'); if (dir !== 'stop') sendCommand('stop'); });
-      btn.addEventListener('mouseleave', () => { btn.classList.remove('active'); if (dir !== 'stop') sendCommand('stop'); });
+      const start = (e) => {
+        e.preventDefault();
+        btn.classList.add('active');
+        sendCommand(dir);
+      };
+      const end = () => {
+        btn.classList.remove('active');
+        if (dir !== 'stop') sendCommand('stop');
+      };
 
-      btn.addEventListener('touchstart', (e) => { e.preventDefault(); btn.classList.add('active'); sendCommand(dir); });
-      btn.addEventListener('touchend',   () => { btn.classList.remove('active'); if (dir !== 'stop') sendCommand('stop'); });
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('mouseup', end);
+      btn.addEventListener('mouseleave', end);
+      btn.addEventListener('touchstart', start, {passive: false});
+      btn.addEventListener('touchend', end);
     });
 
+    // ========== Speed slider ==========
     speedInput.addEventListener('input', () => {
-      speed = speedInput.value;
+      speed = +speedInput.value;
       speedValue.textContent = speed + '%';
     });
 
-    // Keyboard support
+    // ========== Keyboard ==========
     const keyMap = {
-      ArrowUp:    'forward',
-      ArrowDown:  'back',
-      ArrowLeft:  'left',
-      ArrowRight: 'right',
-      ' ':        'stop'
+      ArrowUp: 'forward', ArrowDown: 'back',
+      ArrowLeft: 'left', ArrowRight: 'right',
+      ' ': 'stop'
     };
 
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', e => {
       if (keyMap[e.key]) {
         e.preventDefault();
         const dir = keyMap[e.key];
-        document.querySelector(`.btn[data-dir="${dir}"]`)?.classList.add('active');
+        setActiveButton(dir);
         sendCommand(dir);
       }
     });
 
-    document.addEventListener('keyup', (e) => {
+    document.addEventListener('keyup', e => {
       if (keyMap[e.key] && keyMap[e.key] !== 'stop') {
-        document.querySelector(`.btn[data-dir="${keyMap[e.key]}"]`)?.classList.remove('active');
+        setActiveButton('stop');
         sendCommand('stop');
       }
     });
+
+    // ========== Xbox / Gamepad support ==========
+    window.addEventListener('gamepadconnected', (e) => {
+  gamepadIndex = e.gamepad.index;
+  padDot.classList.add('connected');
+  padText.textContent = e.gamepad.id.includes('Xbox') ? 'Xbox controller' : 'Gamepad connected';
+});
+
+window.addEventListener('gamepaddisconnected', (e) => {
+  if (gamepadIndex === e.gamepad.index) {
+    gamepadIndex = null;
+    padDot.classList.remove('connected');
+    padText.textContent = 'No controller';
+    sendCommand('stop', 0);
+    setActiveButton('stop');
+  }
+});
+
+function pollGamepad() {
+  if (gamepadIndex === null) {
+    requestAnimationFrame(pollGamepad);
+    return;
+  }
+
+  const gp = navigator.getGamepads()[gamepadIndex];
+  if (!gp) {
+    requestAnimationFrame(pollGamepad);
+    return;
+  }
+
+  const deadzone = 0.18;
+  let direction = 'stop';
+  let stickSpeed = 0;
+
+  // Left stick (axes 0 = X, 1 = Y)
+  const x = gp.axes[0] || 0;
+  const y = gp.axes[1] || 0;
+  const magnitude = Math.min(1, Math.sqrt(x * x + y * y));
+
+  if (magnitude > deadzone) {
+    stickSpeed = Math.round(magnitude * 100);
+
+    // Determine dominant direction
+    if (Math.abs(y) > Math.abs(x)) {
+      direction = y < 0 ? 'forward' : 'back';
+    } else {
+      direction = x < 0 ? 'left' : 'right';
+    }
+  }
+
+  // A button (button 0)
+  const aPressed = gp.buttons[0]?.pressed || false;
+
+  // Also still support D-pad
+  if (gp.buttons[12]?.pressed) { direction = 'forward'; stickSpeed = 100; }
+  if (gp.buttons[13]?.pressed) { direction = 'back';    stickSpeed = 100; }
+  if (gp.buttons[14]?.pressed) { direction = 'left';    stickSpeed = 100; }
+  if (gp.buttons[15]?.pressed) { direction = 'right';   stickSpeed = 100; }
+
+  // Force stop buttons
+  if (gp.buttons[1]?.pressed || gp.buttons[2]?.pressed || gp.buttons[3]?.pressed || gp.buttons[9]?.pressed) {
+    direction = 'stop';
+    stickSpeed = 0;
+  }
+
+  // Update UI speed slider to match stick
+  if (stickSpeed !== speed) {
+    speed = stickSpeed;
+    speedInput.value = speed;
+    speedValue.textContent = speed + '%';
+  }
+
+  setActiveButton(direction);
+  sendCommand(direction, stickSpeed, aPressed);
+
+  requestAnimationFrame(pollGamepad);
+}
+
+requestAnimationFrame(pollGamepad);
   </script>
 </body>
 </html>
